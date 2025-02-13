@@ -35,3 +35,47 @@ resource "azurerm_key_vault" "vault" {
 
     tags = var.tags
 }
+
+resource "azurerm_key_vault_certificate" "managed_cert" {
+  for_each = var.certificates
+  name = each.key
+    key_vault_id = azurerm_key_vault.vault.id
+
+    certificate_policy {
+      issuer_parameters {
+        name = "Self"
+      }
+
+        key_properties {
+            key_type = each.value.key_type
+            reuse_key = each.value.reuse_key
+            exportable = each.value.exportable
+            key_size = each.value.key_size
+        }
+
+        lifetime_action {
+          action {
+            action_type = "AutoRenew"
+          }
+          
+            trigger {
+                days_before_expiry = var.certificate_renewal_days
+            }
+        }
+
+        secret_properties {
+            content_type = each.value.content_type
+        }
+
+        x509_certificate_properties {
+            extended_key_usage = ["1.2.3.6.1.5.5.7.3.1"]
+            key_usage = [ "digitalSignature", "keyEncipherment" ]
+            subject = each.value.subject
+            validity_in_months = each.value.validity_months
+
+            subject_alternative_names {
+                dns_names = each.value.dns_names
+            }
+        }
+    }
+}
