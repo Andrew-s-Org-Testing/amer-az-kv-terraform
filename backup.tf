@@ -13,3 +13,14 @@ resource "azurerm_storage_account" "backup" {
 
     tags = var.tags
 }
+
+resource "azurerm_key_vault_backup" "vault_backup" {
+  key_vault_id = azurerm_key_vault.vault.id
+    storage_account_id = azurerm_storage_account.backup.id
+    enabled = true
+
+    backup_schedule {
+        frequency_in_days = 1
+        retention_period_in_days = 30
+    }
+}
