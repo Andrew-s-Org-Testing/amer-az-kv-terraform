@@ -1,0 +1,388 @@
+name: Terraform Testing Framework
+
+on:
+  pull_request:
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - '.github/workflows/terraform-*.yml'
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Test Level'
+        required: true
+        type: choice
+        options:
+          - static
+          - unit
+          - integration
+          - full
+        default: 'static'
+      environment:
+        description: 'Test Environment'
+        required: false
+        type: choice
+        options:
+          - dev
+          - staging
+        default: 'dev'
+
+env:
+  TF_VERSION: "1.6.0"
+  TERRATEST_LOG_PARSER: "junit"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+jobs:
+  # Stage 1: Pre-validation and Setup
+  setup:
+    name: Setup and Validation
+    runs-on: ubuntu-latest
+    outputs:
+      modules_changed: ${{ steps.detect_changes.outputs.modules }}
+      test_matrix: ${{ steps.test_matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Detect Changed Modules
+        id: detect_changes
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # For manual runs, test all modules
+            MODULES=$(find . -name "*.tf" -not -path "./.*" | xargs dirname | sort -u | jq -R . | jq -s .)
+          else
+            # For PRs, only test changed modules
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E '\.(tf|tfvars)$' || true)
+            if [ -z "$CHANGED_FILES" ]; then
+              MODULES="[]"
+            else
+              MODULES=$(echo "$CHANGED_FILES" | xargs dirname | sort -u | jq -R . | jq -s .)
+            fi
+          fi
+          echo "modules=$MODULES" >> $GITHUB_OUTPUT
+          echo "Changed modules: $MODULES"
+
+      - name: Create Test Matrix
+        id: test_matrix
+        run: |
+          MATRIX=$(echo '${{ steps.detect_changes.outputs.modules }}' | jq -c '{include: [.[] | {module: ., environment: ["dev", "staging"]}] | flatten}')
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  # Stage 2: Static Analysis
+  static_analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    needs: setup
+    if: ${{ needs.setup.outputs.modules_changed != '[]' }}
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.setup.outputs.modules_changed) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        working-directory: ${{ matrix.module }}
+        run: |
+          terraform fmt -check -recursive
+          if [ $? -ne 0 ]; then
+            echo "::error::Terraform files are not formatted correctly"
+            exit 1
+          fi
+
+      - name: Terraform Validate
+        working-directory: ${{ matrix.module }}
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Run TFLint
+        working-directory: ${{ matrix.module }}
+        run: |
+          tflint --init
+          tflint --format=junit > tflint-results.xml
+
+      - name: Setup and Run Checkov
+        working-directory: ${{ matrix.module }}
+        run: |
+          pip install checkov
+          checkov -d . --framework terraform --output junit --output-file checkov-results.xml || true
+
+      - name: Setup and Run TFSec
+        working-directory: ${{ matrix.module }}
+        run: |
+          curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 -o tfsec
+          chmod +x tfsec
+          ./tfsec . --format junit --out tfsec-results.xml || true
+
+      - name: Run Infracost
+        uses: infracost/actions/setup@v2
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+      
+      - name: Generate Cost Estimate
+        working-directory: ${{ matrix.module }}
+        run: |
+          infracost breakdown --path . --format json --out-file infracost.json || true
+          if [ -f infracost.json ]; then
+            infracost output --path infracost.json --format github-comment --out-file cost-comment.md
+          fi
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: static-analysis-${{ matrix.module }}-${{ github.run_id }}
+          path: |
+            ${{ matrix.module }}/*-results.xml
+            ${{ matrix.module }}/infracost.json
+            ${{ matrix.module }}/cost-comment.md
+
+  # Stage 3: Security and Compliance
+  security_compliance:
+    name: Security & Compliance
+    runs-on: ubuntu-latest
+    needs: [setup, static_analysis]
+    if: ${{ needs.setup.outputs.modules_changed != '[]' }}
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.setup.outputs.modules_changed) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Azure Policy Validation
+        working-directory: ${{ matrix.module }}
+        run: |
+          # Create a test plan for policy validation
+          terraform init -backend=false
+          terraform plan -out=tfplan
+
+          # Convert plan to JSON for policy analysis
+          terraform show -json tfplan > plan.json
+
+          # Run custom Azure Policy validation script
+          python3 ../scripts/validate_azure_policies.py plan.json
+
+      - name: OPA/Rego Policy Tests
+        working-directory: ${{ matrix.module }}
+        run: |
+          # Install OPA
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64
+          chmod +x opa
+
+          # Run policy tests if they exist
+          if [ -d "../policies" ]; then
+            ./opa test ../policies/ . --format=junit --output-file opa-results.xml
+          fi
+
+      - name: Terraform Compliance
+        working-directory: ${{ matrix.module }}
+        run: |
+          pip install terraform-compliance
+          
+          # Run compliance tests if feature files exist
+          if [ -d "../features" ]; then
+            terraform-compliance -p tfplan -f ../features --junit-xml compliance-results.xml || true
+          fi
+
+      - name: Upload Security Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-compliance-${{ matrix.module }}-${{ github.run_id }}
+          path: |
+            ${{ matrix.module }}/opa-results.xml
+            ${{ matrix.module }}/compliance-results.xml
+
+  # Stage 4: Unit Testing
+  unit_tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [setup, static_analysis]
+    if: ${{ github.event.inputs.test_level == 'unit' || github.event.inputs.test_level == 'full' || github.event_name == 'push' }}
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.setup.outputs.modules_changed) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Run Terratest Unit Tests
+        working-directory: ${{ matrix.module }}
+        run: |
+          if [ -d "test" ]; then
+            cd test
+            go mod tidy
+            go test -v -timeout 30m -run TestUnit ./... | tee ../terratest-unit.log
+            
+            # Convert to JUnit format
+            go install github.com/jstemmer/go-junit-report/v2@latest
+            cat ../terratest-unit.log | go-junit-report -set-exit-code > ../terratest-unit-results.xml
+          fi
+
+      - name: Run Terraform Native Tests
+        working-directory: ${{ matrix.module }}
+        run: |
+          if [ -d "tests" ]; then
+            terraform test -junit-xml=terraform-test-results.xml
+          fi
+
+      - name: Upload Unit Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-tests-${{ matrix.module }}-${{ github.run_id }}
+          path: |
+            ${{ matrix.module }}/terratest-unit-results.xml
+            ${{ matrix.module }}/terraform-test-results.xml
+
+  # Stage 5: Integration Testing
+  integration_tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [setup, static_analysis, security_compliance]
+    if: ${{ github.event.inputs.test_level == 'integration' || github.event.inputs.test_level == 'full' }}
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.setup.outputs.test_matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+
+      - name: Run Integration Tests
+        working-directory: ${{ matrix.module }}
+        env:
+          TEST_ENVIRONMENT: ${{ matrix.environment }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          if [ -d "test" ]; then
+            cd test
+            go mod tidy
+            
+            # Run integration tests with longer timeout
+            go test -v -timeout 60m -run TestIntegration ./... | tee ../terratest-integration.log
+            
+            # Convert to JUnit format
+            cat ../terratest-integration.log | go-junit-report -set-exit-code > ../terratest-integration-results.xml
+          fi
+
+      - name: Resource Validation
+        working-directory: ${{ matrix.module }}
+        run: |
+          # Run post-deployment validation scripts
+          if [ -f "../scripts/validate_resources.sh" ]; then
+            bash ../scripts/validate_resources.sh ${{ matrix.environment }}
+          fi
+
+      - name: Upload Integration Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-tests-${{ matrix.module }}-${{ matrix.environment }}-${{ github.run_id }}
+          path: |
+            ${{ matrix.module }}/terratest-integration-results.xml
+
+  # Stage 6: Test Results Aggregation and Reporting
+  test_results:
+    name: Test Results & Reporting
+    runs-on: ubuntu-latest
+    needs: [static_analysis, security_compliance, unit_tests, integration_tests]
+    if: always()
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results
+
+      - name: Publish Test Results
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Terraform Test Results
+          path: 'test-results/**/*-results.xml'
+          reporter: java-junit
+
+      - name: Generate Test Summary
+        run: |
+          echo "## Terraform Testing Framework Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count test files
+          STATIC_TESTS=$(find test-results -name "*-results.xml" -path "*/static-analysis-*" | wc -l)
+          SECURITY_TESTS=$(find test-results -name "*-results.xml" -path "*/security-compliance-*" | wc -l)
+          UNIT_TESTS=$(find test-results -name "*-results.xml" -path "*/unit-tests-*" | wc -l)
+          INTEGRATION_TESTS=$(find test-results -name "*-results.xml" -path "*/integration-tests-*" | wc -l)
+          
+          echo "| Test Type | Files Processed |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-----------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Analysis | $STATIC_TESTS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security & Compliance | $SECURITY_TESTS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | $UNIT_TESTS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | $INTEGRATION_TESTS |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Update ServiceNow (if configured)
+        if: ${{ github.event.inputs.service_now_ticket }}
+        run: |
+          # Optional: Update ServiceNow ticket with test results
+          curl -u "${{ secrets.SERVICE_NOW_USERNAME }}:${{ secrets.SERVICE_NOW_PASSWORD }}" \
+            -H "Content-Type: application/json" \
+            -X PUT \
+            "https://${{ secrets.SERVICE_NOW_INSTANCE }}.service-now.com/api/now/table/change_request/${{ github.event.inputs.service_now_ticket }}" \
+            -d '{
+              "work_notes": "Terraform testing framework completed for modules. Check GitHub Actions for detailed results.",
+              "u_test_results_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }'

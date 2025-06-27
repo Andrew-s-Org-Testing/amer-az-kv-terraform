@@ -1,0 +1,337 @@
+# .pre-commit-config.yaml - Pre-commit Hooks Configuration
+# Pre-commit hooks run locally before each commit to catch issues early
+# Install with: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+# Global settings
+repos:
+  #
+  # BASIC FILE AND FORMAT CHECKS
+  # These run quickly and catch common file formatting issues
+  #
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0  # Use the ref you want to point at
+    hooks:
+      # File content checks
+      - id: trailing-whitespace
+        # WHY: Trailing whitespace can cause diff noise and formatting issues
+        # SPEED: Very fast
+        # IMPACT: Low, but improves code quality
+        args: ['--markdown-linebreak-ext=md']  # Preserve markdown line breaks
+      
+      - id: end-of-file-fixer
+        # WHY: Ensures files end with newline (POSIX standard)
+        # SPEED: Very fast
+        # IMPACT: Prevents issues with some tools
+      
+      - id: check-merge-conflict
+        # WHY: Prevents committing unresolved merge conflicts
+        # SPEED: Very fast
+        # IMPACT: Critical - prevents broken commits
+      
+      - id: check-case-conflict
+        # WHY: Prevents issues on case-insensitive filesystems (Windows/macOS)
+        # SPEED: Very fast
+        # IMPACT: Prevents cross-platform issues
+      
+      # File format validation
+      - id: check-yaml
+        # WHY: Validates YAML syntax before commit
+        # SPEED: Fast
+        # IMPACT: Prevents invalid YAML files
+        # APPLIES TO: .github/workflows/*.yml, .pre-commit-config.yaml, etc.
+        args: ['--allow-multiple-documents']
+      
+      - id: check-json
+        # WHY: Validates JSON syntax
+        # SPEED: Fast  
+        # IMPACT: Prevents invalid JSON files
+        # APPLIES TO: *.json files in module
+      
+      - id: check-toml
+        # WHY: Validates TOML files if used
+        # SPEED: Fast
+        # NOTE: May not be needed if you don't use TOML
+      
+      # Security checks
+      - id: detect-private-key
+        # WHY: Prevents accidentally committing private keys
+        # SPEED: Fast
+        # IMPACT: Critical security protection
+        # NOTE: May have false positives with test keys
+      
+      - id: check-added-large-files
+        # WHY: Prevents committing large files that should be in Git LFS
+        # SPEED: Fast
+        # IMPACT: Keeps repository size manageable
+        args: ['--maxkb=1000']  # Adjust size limit as needed
+      
+      # TODO: Add these if relevant to your workflow
+      # - id: check-executables-have-shebangs
+      # - id: check-shebang-scripts-are-executable
+      # - id: detect-aws-credentials  # Enable if you use AWS
+
+  #
+  # TERRAFORM-SPECIFIC HOOKS
+  # These hooks are specifically designed for Terraform code quality
+  #
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.83.5  # Check for latest version
+    hooks:
+      # Core Terraform formatting and validation
+      - id: terraform_fmt
+        # WHY: Ensures consistent Terraform code formatting
+        # SPEED: Fast
+        # IMPACT: High - maintains code consistency across team
+        # BEHAVIOR: Automatically fixes formatting issues
+        args:
+          - --args=-recursive
+          - --args=-diff
+        
+      - id: terraform_validate
+        # WHY: Validates Terraform syntax and configuration
+        # SPEED: Medium (requires terraform init)
+        # IMPACT: High - catches syntax errors before commit
+        # NOTE: Requires modules to be valid standalone
+        args:
+          - --args=-json
+          - --hook-config=--retry-once-with-cleanup=true
+        
+      # Documentation generation
+      - id: terraform_docs
+        # WHY: Automatically generates/updates module documentation
+        # SPEED: Medium
+        # IMPACT: High - keeps documentation in sync with code
+        args:
+          - --hook-config=--path-to-file=README.md
+          - --hook-config=--add-to-existing-file=true
+          - --hook-config=--create-file-if-not-exist=true
+          # TODO: Customize documentation template
+          # - --hook-config=--template-path=.terraform-docs.yml
+        
+      # Static analysis and linting
+      - id: terraform_tflint
+        # WHY: Runs TFLint to catch Terraform-specific issues
+        # SPEED: Medium-slow (downloads plugins)
+        # IMPACT: High - catches issues before CI/CD
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+          - --args=--init
+        # TODO: Consider caching tflint plugins for speed
+        
+      - id: terraform_checkov
+        # WHY: Runs security checks locally before commit
+        # SPEED: Slow (comprehensive security scanning)
+        # IMPACT: High - catches security issues early
+        args:
+          - --args=--config-file __GIT_WORKING_DIR__/.checkov.yml
+          - --args=--quiet
+          - --args=--compact
+        
+      # TODO: Additional Terraform hooks to consider
+      # - id: terraform_tfsec
+      #   # WHY: Additional security scanning with tfsec
+      #   # SPEED: Medium
+      #   # NOTE: May overlap with checkov, choose based on preference
+      
+      # - id: terragrunt_validate
+      #   # WHY: If using Terragrunt for module orchestration
+      #   # ENABLE: Only if you use Terragrunt
+      
+      # - id: terraform_providers_lock
+      #   # WHY: Ensures provider lock file is updated
+      #   # IMPACT: Prevents provider version drift
+      #   args:
+      #     - --args=-platform=windows_amd64
+      #     - --args=-platform=darwin_amd64  
+      #     - --args=-platform=linux_amd64
+
+  #
+  # SECRET DETECTION
+  # Advanced secret detection beyond basic private key check
+  #
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        # WHY: Comprehensive secret detection (API keys, passwords, tokens)
+        # SPEED: Medium
+        # IMPACT: Critical security protection
+        args: 
+          - '--baseline'
+          - '.secrets.baseline'
+          - '--exclude-files'
+          - '.*\.terraform\.lock\.hcl'  # Exclude lock files
+          - '--exclude-files'  
+          - '.*test.*\.go'              # May exclude test files if they contain test secrets
+        # TODO: Create initial baseline with: detect-secrets scan --baseline .secrets.baseline
+        # TODO: Review and update baseline regularly
+
+  #
+  # OPTIONAL: ADDITIONAL LANGUAGE-SPECIFIC HOOKS
+  # Enable these based on what other languages/tools you use in modules
+  #
+  
+  # Go formatting (if you have Go tests)
+  # - repo: https://github.com/dnephin/pre-commit-golang
+  #   rev: v0.5.1
+  #   hooks:
+  #     - id: go-fmt
+  #     - id: go-vet
+  #     - id: go-mod-tidy
+
+  # Python formatting (if you have Python scripts)
+  # - repo: https://github.com/psf/black
+  #   rev: 23.7.0
+  #   hooks:
+  #     - id: black
+  #       language_version: python3
+
+  # Shell script formatting (if you have shell scripts)
+  # - repo: https://github.com/shellcheck-py/shellcheck-py
+  #   rev: v0.9.0.5
+  #   hooks:
+  #     - id: shellcheck
+
+#
+# GLOBAL CONFIGURATION
+#
+default_stages: [commit]          # When to run hooks: commit, push, manual
+fail_fast: false                  # Continue running hooks even if one fails
+minimum_pre_commit_version: "3.0.0"
+
+# TODO: Consider adding these global settings
+# exclude: |                      # Files to exclude from all hooks
+#   (?x)^(
+#     \.terraform/.*|
+#     \.terraform\.lock\.hcl|
+#     test/go\.(mod|sum)
+#   )$
+
+#
+# PERFORMANCE OPTIMIZATION
+#
+
+# For faster execution during development:
+# 1. Run specific hooks: pre-commit run terraform_fmt
+# 2. Skip expensive hooks: SKIP=terraform_checkov git commit
+# 3. Update hooks: pre-commit autoupdate
+
+# For CI/CD integration:
+# - Pre-commit can also run in CI to ensure consistency
+# - Use: pre-commit run --all-files
+
+#
+# HOOK EXECUTION ORDER AND DEPENDENCIES
+#
+
+# Hooks run in the order defined in this file:
+# 1. Basic file checks (fast)
+# 2. Terraform formatting (medium, auto-fixes)
+# 3. Terraform validation (medium)
+# 4. Documentation generation (medium, auto-fixes)
+# 5. Linting and security (slow)
+
+# Auto-fixing hooks (terraform_fmt, terraform_docs) run first
+# to prepare files for validation hooks
+
+#
+# TROUBLESHOOTING COMMON ISSUES
+#
+
+# Issue: terraform_validate fails on valid modules
+# Solution: Ensure module can be validated independently
+# - Check that required providers are specified
+# - Ensure variables have defaults or are optional
+# - Consider using --hook-config=--retry-once-with-cleanup=true
+
+# Issue: terraform_tflint is slow
+# Solution: 
+# - Cache the .tflint.d directory
+# - Use --args=--disable-rule=<rule> for problematic rules
+# - Consider running only in CI for complex rules
+
+# Issue: terraform_checkov has too many false positives  
+# Solution:
+# - Customize .checkov.yml to skip irrelevant checks
+# - Use inline comments to skip specific findings
+# - Start with critical security checks only
+
+# Issue: detect-secrets reports false positives
+# Solution:
+# - Update .secrets.baseline with: detect-secrets scan --update .secrets.baseline
+# - Add inline comments: # pragma: allowlist secret
+# - Exclude test files that contain dummy secrets
+
+# Issue: Hooks are too slow for daily development
+# Solution:
+# - Use SKIP environment variable: SKIP=terraform_checkov git commit
+# - Run expensive hooks only on push: stages: [push]
+# - Create separate configs for different workflows
+
+#
+# CUSTOMIZATION GUIDELINES
+#
+
+# FOR DIFFERENT MODULE TYPES:
+
+# Storage modules:
+# - Focus on terraform_fmt, terraform_validate, terraform_checkov
+# - May skip complex linting for simple modules
+
+# Network modules:
+# - All hooks important due to security implications
+# - Pay special attention to terraform_checkov for NSG rules
+
+# Compute modules:
+# - terraform_tflint important for catching VM configuration issues
+# - terraform_checkov critical for security misconfigurations
+
+# Database modules:
+# - All security hooks critical
+# - Consider additional database-specific linting
+
+#
+# TEAM ADOPTION STRATEGY
+#
+
+# Phase 1: Basic hooks (formatting, validation)
+# - Enable terraform_fmt, terraform_validate
+# - Get team comfortable with pre-commit workflow
+
+# Phase 2: Documentation and basic security
+# - Add terraform_docs, detect-secrets
+# - Establish documentation standards
+
+# Phase 3: Full security scanning
+# - Add terraform_checkov, terraform_tflint
+# - Train team on security best practices
+
+# Phase 4: Advanced tooling
+# - Add custom hooks for organization-specific requirements
+# - Integrate with additional security tools
+
+#
+# INTEGRATION WITH DEVELOPMENT WORKFLOW
+#
+
+# Local development:
+# 1. Developer makes changes
+# 2. Pre-commit runs automatically on git commit
+# 3. Issues are caught and fixed locally
+# 4. Clean code is pushed to repository
+
+# CI/CD integration:
+# 1. GitHub Actions runs same checks in CI
+# 2. Provides consistent validation environment
+# 3. Catches issues if pre-commit is skipped
+# 4. Generates reports for security/compliance tracking
+
+# TODO: Set up team training on:
+# - Installing and configuring pre-commit
+# - Understanding hook output and fixing issues
+# - When to skip hooks vs fix underlying issues
+# - Maintaining .secrets.baseline and other config files

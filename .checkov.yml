@@ -1,0 +1,266 @@
+# .checkov.yml - Checkov Security and Compliance Configuration
+# Checkov scans Terraform code for security misconfigurations and compliance violations
+# Place this file in the root of each module repository
+
+# Basic Configuration
+branch: main                    # Default branch for baseline comparisons
+framework:                      # Frameworks to scan
+  - terraform                   # Primary focus on Terraform
+  # - dockerfile                # Enable if modules include Docker
+  # - kubernetes               # Enable if modules include K8s manifests
+  # - cloudformation           # Enable if you have CloudFormation templates
+
+# Output Configuration
+output: cli                     # Primary output format (cli, json, junit, csv, sarif)
+output-file: checkov-results.xml  # JUnit XML for GitHub Actions integration
+quiet: true                     # Reduce verbose output in logs
+compact: true                   # Compact output format
+no-guide: false                 # Include remediation guidance in output
+
+# Performance Settings
+download-external-modules: false  # Don't download external modules (speeds up scanning)
+evaluate-variables: true        # Evaluate variable values for more accurate scanning
+
+#
+# AZURE STORAGE SECURITY CHECKS
+# Critical for data protection and compliance
+#
+
+check:
+  # Storage Account - HTTPS and Encryption
+  - CKV_AZURE_1     # Ensure storage account enables https traffic only
+                    # WHY: Prevents data interception during transit
+                    # IMPACT: High - fundamental security requirement
+  
+  - CKV_AZURE_3     # Ensure storage account uses HTTPS
+                    # WHY: Redundant check with CKV_AZURE_1, but catches edge cases
+                    # NOTE: May overlap with CKV_AZURE_1
+  
+  - CKV_AZURE_33    # Ensure storage account uses latest TLS version
+                    # WHY: Older TLS versions have known vulnerabilities
+                    # REQUIRES: min_tls_version = "TLS1_2"
+  
+  - CKV_AZURE_44    # Ensure storage account uses latest TLS encryption
+                    # WHY: Ensures strong encryption in transit
+                    # NOTE: Similar to CKV_AZURE_33 but different implementation
+  
+  # Storage Account - Network Access Controls
+  - CKV_AZURE_35    # Ensure default network access rule for Storage Accounts is set to deny
+                    # WHY: Implements principle of least privilege
+                    # REQUIRES: public_network_access_enabled = false
+  
+  - CKV_AZURE_36    # Ensure 'Trusted Microsoft Services' is enabled for Storage Account access
+                    # WHY: Allows Azure services to access storage when needed
+                    # REQUIRES: Proper service endpoint configuration
+  
+  - CKV_AZURE_59    # Ensure that Storage accounts disallow public read access to all the containers and blobs
+                    # WHY: Prevents accidental data exposure
+                    # REQUIRES: allow_nested_items_to_be_public = false
+
+#
+# AZURE KEY VAULT SECURITY CHECKS  
+# Essential for secrets and key management
+#
+
+  - CKV_AZURE_8     # Ensure that 'key vault' key is backed by a hardware security module
+                    # WHY: HSM provides highest level of key protection
+                    # NOTE: May be costly - evaluate based on compliance requirements
+                    # TODO: Consider if HSM is required for your use case
+  
+  - CKV_AZURE_109   # Ensure Key Vault has purge protection enabled
+                    # WHY: Prevents accidental permanent deletion of vault
+                    # REQUIRES: purge_protection_enabled = true
+                    # IMPACT: Cannot be disabled once enabled
+  
+  - CKV_AZURE_110   # Ensure key vault has soft delete enabled
+                    # WHY: Allows recovery of accidentally deleted keys/secrets
+                    # REQUIRES: soft_delete_retention_days >= 7
+  
+  - CKV_AZURE_189   # Ensure that Azure Key Vault disables public network access
+                    # WHY: Restricts access to private networks only
+                    # REQUIRES: public_network_access_enabled = false
+                    # TODO: May need to skip if public access is required
+
+#
+# AZURE NETWORK SECURITY CHECKS
+# Critical for network segmentation and access control
+#
+
+  - CKV_AZURE_9     # Ensure no unrestricted SSH access from 0.0.0.0/0
+                    # WHY: Prevents brute force attacks and unauthorized access
+                    # CHECKS: NSG rules allowing SSH (port 22) from anywhere
+  
+  - CKV_AZURE_10    # Ensure that SQL server has a firewall configured
+                    # WHY: Controls database access at network level
+                    # APPLIES: To azurerm_sql_server and azurerm_mssql_server
+  
+  - CKV_AZURE_12    # Ensure no unrestricted access to all ports
+                    # WHY: Prevents overly permissive network rules
+                    # CHECKS: NSG rules allowing all traffic from anywhere
+  
+  - CKV_AZURE_13    # Ensure no unrestricted RDP access from 0.0.0.0/0
+                    # WHY: RDP is commonly targeted for attacks
+                    # CHECKS: NSG rules allowing RDP (port 3389) from anywhere
+
+#
+# AZURE COMPUTE SECURITY CHECKS
+# For virtual machines and compute resources
+#
+
+  - CKV_AZURE_50    # Ensure Virtual Machine uses managed disks
+                    # WHY: Managed disks provide better availability and security
+                    # REQUIRES: Use azurerm_managed_disk instead of unmanaged disks
+  
+  - CKV_AZURE_149   # Ensure that Virtual machine does not enable public IP
+                    # WHY: Reduces attack surface by avoiding direct internet exposure
+                    # TODO: May need to skip for modules that require public access
+  
+  # TODO: Add based on your VM security requirements
+  # - CKV_AZURE_178   # Ensure linux VM enables SSH with keys for secure connection
+  # - CKV_AZURE_179   # Ensure VM agent is installed
+
+#
+# AZURE MONITORING AND LOGGING
+# Important for security visibility and compliance
+#
+
+  - CKV_AZURE_94    # Ensure that Azure Kubernetes Service (AKS) logging is enabled
+                    # WHY: Essential for security monitoring and troubleshooting
+                    # APPLIES: If your modules create AKS clusters
+  
+  # TODO: Add monitoring checks based on your requirements
+  # - CKV_AZURE_92    # Ensure that Azure Kubernetes Service (AKS) has monitoring enabled
+  # - CKV_AZURE_114   # Ensure that Application Gateway has WAF enabled
+
+#
+# AZURE IDENTITY AND ACCESS MANAGEMENT
+# Critical for proper access control
+#
+
+  # TODO: Add IAM checks based on your access patterns
+  # - CKV_AZURE_74    # Ensure that Azure Key Vault uses RBAC for authorization
+  # - CKV_AZURE_155   # Ensure that Azure Active Directory admin is configured for SQL server
+
+#
+# CHECKS TO POTENTIALLY SKIP
+# These may not apply to all modules or environments
+#
+
+skip-check:
+  # Storage Account checks that might be too restrictive
+  - CKV_AZURE_206   # Ensure that Storage Account is using the latest version of TLS encryption
+                    # WHY: May conflict with specific application requirements
+                    # TODO: Review and enable if compatible with your applications
+  
+  # Network checks that might be too restrictive for development
+  # - CKV_AZURE_160   # Ensure that UDP access from the Internet is evaluated and restricted
+                    # WHY: May be needed for specific protocols
+                    # TODO: Enable for production modules, consider skipping for dev
+  
+  # Key Vault checks that might be cost-prohibitive
+  # - CKV_AZURE_8     # HSM backing - expensive, evaluate per use case
+  
+  # Database checks that might not apply to all modules
+  # - CKV_AZURE_23    # Ensure that 'Auditing' is set to 'On' for SQL databases
+                    # WHY: May not apply if module doesn't create databases
+  
+  # TODO: Review and customize skip list based on your module types
+
+#
+# ENVIRONMENT-SPECIFIC CONFIGURATION
+# Different rules for different environments
+#
+
+# For Development/Sandbox environments, you might want to skip:
+# - Cost-related checks (HSM, premium tiers)
+# - Strict network isolation checks
+# - Advanced monitoring requirements
+
+# For Production environments, enable all relevant checks:
+# - All security checks should pass
+# - All compliance checks should pass
+# - No exceptions unless documented and approved
+
+#
+# CUSTOM CHECKS AND POLICIES
+# You can define custom checks using Python
+
+# Example custom check structure:
+# custom-checks:
+#   - check-id: "CUSTOM_AZURE_001"
+#     file-path: "./custom-checks/azure_naming_convention.py"
+#     description: "Ensure Azure resources follow organization naming convention"
+
+# TODO: Develop custom checks for:
+# - Organization-specific naming conventions
+# - Cost optimization requirements
+# - Compliance-specific validations
+
+#
+# INTEGRATION SETTINGS
+# Optimized for GitHub Actions workflow
+#
+
+# Output format settings for CI/CD
+# - cli: Human-readable output for logs
+# - junit: XML format for test result integration
+# - sarif: For GitHub Security tab integration (if desired)
+
+# Performance optimization for CI/CD:
+# - quiet: true - reduces log noise
+# - compact: true - condensed output
+# - download-external-modules: false - faster execution
+
+#
+# BASELINE AND COMPARISON
+# For tracking security posture over time
+#
+
+# baseline: "checkov-baseline.json"  # File to store baseline results
+# check-policy: "policy.json"        # Custom policy file if needed
+
+#
+# TROUBLESHOOTING COMMON ISSUES
+#
+
+# Issue: Too many false positives
+# Solution: Gradually enable checks, start with critical security issues only
+
+# Issue: Check conflicts with legitimate use cases  
+# Solution: Use skip-check or conditional logic in Terraform
+
+# Issue: Performance issues in CI/CD
+# Solution: Enable download-external-modules: false and use quiet mode
+
+# Issue: Conflicting requirements between environments
+# Solution: Create environment-specific .checkov.yml files
+
+#
+# NEXT STEPS FOR CUSTOMIZATION
+#
+
+# 1. ASSESS CURRENT MODULES:
+#    - Run checkov against existing modules to see current violations
+#    - Categorize findings: critical, important, nice-to-have
+#    - Plan remediation strategy
+
+# 2. PRIORITIZE CHECKS:
+#    - Start with high-impact security checks
+#    - Add compliance checks based on requirements
+#    - Gradually expand to cover all relevant areas
+
+# 3. CUSTOMIZE FOR MODULE TYPES:
+#    - Storage modules: Focus on data protection checks
+#    - Network modules: Focus on access control checks  
+#    - Compute modules: Focus on hardening checks
+#    - Database modules: Focus on encryption and access checks
+
+# 4. ESTABLISH BASELINE:
+#    - Document current security posture
+#    - Set targets for improvement
+#    - Track progress over time
+
+# 5. TEAM TRAINING:
+#    - Educate team on security check meanings
+#    - Establish process for handling violations
+#    - Create guidelines for when to skip checks vs fix issues
