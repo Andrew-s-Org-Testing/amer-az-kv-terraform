@@ -15,7 +15,6 @@ output: cli                     # Primary output format (cli, json, junit, csv, 
 output-file: checkov-results.xml  # JUnit XML for GitHub Actions integration
 quiet: true                     # Reduce verbose output in logs
 compact: true                   # Compact output format
-no-guide: false                 # Include remediation guidance in output
 
 # Performance Settings
 download-external-modules: false  # Don't download external modules (speeds up scanning)
@@ -31,34 +30,34 @@ check:
   - CKV_AZURE_1     # Ensure storage account enables https traffic only
                     # WHY: Prevents data interception during transit
                     # IMPACT: High - fundamental security requirement
-  
+
   - CKV_AZURE_3     # Ensure storage account uses HTTPS
                     # WHY: Redundant check with CKV_AZURE_1, but catches edge cases
                     # NOTE: May overlap with CKV_AZURE_1
-  
+
   - CKV_AZURE_33    # Ensure storage account uses latest TLS version
                     # WHY: Older TLS versions have known vulnerabilities
                     # REQUIRES: min_tls_version = "TLS1_2"
-  
+
   - CKV_AZURE_44    # Ensure storage account uses latest TLS encryption
                     # WHY: Ensures strong encryption in transit
                     # NOTE: Similar to CKV_AZURE_33 but different implementation
-  
+
   # Storage Account - Network Access Controls
   - CKV_AZURE_35    # Ensure default network access rule for Storage Accounts is set to deny
                     # WHY: Implements principle of least privilege
                     # REQUIRES: public_network_access_enabled = false
-  
+
   - CKV_AZURE_36    # Ensure 'Trusted Microsoft Services' is enabled for Storage Account access
                     # WHY: Allows Azure services to access storage when needed
                     # REQUIRES: Proper service endpoint configuration
-  
+
   - CKV_AZURE_59    # Ensure that Storage accounts disallow public read access to all the containers and blobs
                     # WHY: Prevents accidental data exposure
                     # REQUIRES: allow_nested_items_to_be_public = false
 
 #
-# AZURE KEY VAULT SECURITY CHECKS  
+# AZURE KEY VAULT SECURITY CHECKS
 # Essential for secrets and key management
 #
 
@@ -66,16 +65,16 @@ check:
                     # WHY: HSM provides highest level of key protection
                     # NOTE: May be costly - evaluate based on compliance requirements
                     # TODO: Consider if HSM is required for your use case
-  
+
   - CKV_AZURE_109   # Ensure Key Vault has purge protection enabled
                     # WHY: Prevents accidental permanent deletion of vault
                     # REQUIRES: purge_protection_enabled = true
                     # IMPACT: Cannot be disabled once enabled
-  
+
   - CKV_AZURE_110   # Ensure key vault has soft delete enabled
                     # WHY: Allows recovery of accidentally deleted keys/secrets
                     # REQUIRES: soft_delete_retention_days >= 7
-  
+
   - CKV_AZURE_189   # Ensure that Azure Key Vault disables public network access
                     # WHY: Restricts access to private networks only
                     # REQUIRES: public_network_access_enabled = false
@@ -89,15 +88,15 @@ check:
   - CKV_AZURE_9     # Ensure no unrestricted SSH access from 0.0.0.0/0
                     # WHY: Prevents brute force attacks and unauthorized access
                     # CHECKS: NSG rules allowing SSH (port 22) from anywhere
-  
+
   - CKV_AZURE_10    # Ensure that SQL server has a firewall configured
                     # WHY: Controls database access at network level
                     # APPLIES: To azurerm_sql_server and azurerm_mssql_server
-  
+
   - CKV_AZURE_12    # Ensure no unrestricted access to all ports
                     # WHY: Prevents overly permissive network rules
                     # CHECKS: NSG rules allowing all traffic from anywhere
-  
+
   - CKV_AZURE_13    # Ensure no unrestricted RDP access from 0.0.0.0/0
                     # WHY: RDP is commonly targeted for attacks
                     # CHECKS: NSG rules allowing RDP (port 3389) from anywhere
@@ -110,11 +109,11 @@ check:
   - CKV_AZURE_50    # Ensure Virtual Machine uses managed disks
                     # WHY: Managed disks provide better availability and security
                     # REQUIRES: Use azurerm_managed_disk instead of unmanaged disks
-  
+
   - CKV_AZURE_149   # Ensure that Virtual machine does not enable public IP
                     # WHY: Reduces attack surface by avoiding direct internet exposure
                     # TODO: May need to skip for modules that require public access
-  
+
   # TODO: Add based on your VM security requirements
   # - CKV_AZURE_178   # Ensure linux VM enables SSH with keys for secure connection
   # - CKV_AZURE_179   # Ensure VM agent is installed
@@ -127,7 +126,7 @@ check:
   - CKV_AZURE_94    # Ensure that Azure Kubernetes Service (AKS) logging is enabled
                     # WHY: Essential for security monitoring and troubleshooting
                     # APPLIES: If your modules create AKS clusters
-  
+
   # TODO: Add monitoring checks based on your requirements
   # - CKV_AZURE_92    # Ensure that Azure Kubernetes Service (AKS) has monitoring enabled
   # - CKV_AZURE_114   # Ensure that Application Gateway has WAF enabled
@@ -151,19 +150,19 @@ skip-check:
   - CKV_AZURE_206   # Ensure that Storage Account is using the latest version of TLS encryption
                     # WHY: May conflict with specific application requirements
                     # TODO: Review and enable if compatible with your applications
-  
+
   # Network checks that might be too restrictive for development
   # - CKV_AZURE_160   # Ensure that UDP access from the Internet is evaluated and restricted
                     # WHY: May be needed for specific protocols
                     # TODO: Enable for production modules, consider skipping for dev
-  
+
   # Key Vault checks that might be cost-prohibitive
   # - CKV_AZURE_8     # HSM backing - expensive, evaluate per use case
-  
+
   # Database checks that might not apply to all modules
   # - CKV_AZURE_23    # Ensure that 'Auditing' is set to 'On' for SQL databases
                     # WHY: May not apply if module doesn't create databases
-  
+
   # TODO: Review and customize skip list based on your module types
 
 #
@@ -226,7 +225,7 @@ skip-check:
 # Issue: Too many false positives
 # Solution: Gradually enable checks, start with critical security issues only
 
-# Issue: Check conflicts with legitimate use cases  
+# Issue: Check conflicts with legitimate use cases
 # Solution: Use skip-check or conditional logic in Terraform
 
 # Issue: Performance issues in CI/CD
@@ -251,7 +250,7 @@ skip-check:
 
 # 3. CUSTOMIZE FOR MODULE TYPES:
 #    - Storage modules: Focus on data protection checks
-#    - Network modules: Focus on access control checks  
+#    - Network modules: Focus on access control checks
 #    - Compute modules: Focus on hardening checks
 #    - Database modules: Focus on encryption and access checks
 
