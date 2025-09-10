@@ -3,16 +3,15 @@
 # Place this file in the root of each module repository
 
 # Basic Configuration
-branch: main                    # Default branch for baseline comparisons
-framework:                      # Frameworks to scan
-  - terraform                   # Primary focus on Terraform
+# branch: main                    # Default branch for baseline comparisons
+framework: terraform                      # Frameworks to scanterraform                   # Primary focus on Terraform
   # - dockerfile                # Enable if modules include Docker
   # - kubernetes               # Enable if modules include K8s manifests
   # - cloudformation           # Enable if you have CloudFormation templates
 
 # Output Configuration
 output: cli                     # Primary output format (cli, json, junit, csv, sarif)
-output-file: checkov-results.xml  # JUnit XML for GitHub Actions integration
+# output_file: checkov-results.xml  # JUnit XML for GitHub Actions integration
 quiet: true                     # Reduce verbose output in logs
 compact: true                   # Compact output format
 

@@ -18,11 +18,13 @@ repos:
         - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
         - --args=--init
     #TODO figure out why this isn't working, probably bad checkov config
-    # - id: terraform_checkov
-    #   args:
-    #     - --args=--config-file __GIT_WORKING_DIR__/.checkov.yml
-    #     - --args=--quiet
-    #     - --args=--compact
+    - id: terraform_checkov
+      args:
+        - --args=--config-file __GIT_WORKING_DIR__/.checkov.yml
+        - --args=--quiet
+        - --args=--compact
+        - --args=--output-file checkov-results.xml
+        - --args=--ouput-format junitxml
 
 
   # git generic hooks
