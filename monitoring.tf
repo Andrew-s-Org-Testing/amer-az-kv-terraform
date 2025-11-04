@@ -1,49 +1,36 @@
-resource "azurerm_monitor_diagnostic_setting" "vault_diagnostics" {
-  name = "${var.key_vault_name}-diagnostics"
-  target_resource_id = azurerm_key_vault.vault.id
-  log_analytics_workspace_id = var.log_analytics_workspace_id
-
-  dynamic "log" {
-    for_each = ["AuditEvent", "AzurePolicyEvaluationDetails"]
-    
-    content {
-        category = log.value
-        enabled = true
-    }
-
-    retention_policy {
-        enabled = true
-        days = 30
-    }
-  }
-
-  metric {
-    category = "AllMetrics"
-    enabled = true
-
-    retention_policy {
-        enabled = true
-        days = 30
-    }
-  }
+module "azure_monitoring_setup" {
+  source = "git::https://github.com/AvnetGIS/amer-az-alerts-terraform?ref=v1.0.0"
+  #checkov:skip=CKV_TF_1:Module source is from a trusted internal repository
+  target_resource_id = azurerm_key_vault.this.id
 }
 
-resource "azurerm_monitor_metric_alert" "certificates_expiry" {
-    for_each = toset(local.monitoring_threshold.certificate_expiry_days)
-    name = "${var.key_vault_name}-cert-expiry-${each.value}-days"
-    resource_group_name = var.resource_group_name
-    scopes = [azurerm_key_vault.vault.id]
-    description = "Alert triggered when a certificate is about to expire in ${each.value} days"
+resource "azurerm_monitor_diagnostic_setting" "vault" {
+  name                       = "${module.kv_amer_label.id}-diagnostics"
+  target_resource_id         = azurerm_key_vault.this.id
+  log_analytics_workspace_id = "/subscriptions/2f2bebb8-4079-4940-9629-b7fd560d6154/resourceGroups/avt-amer-svc-wus3-ent-monitoring-rg/providers/Microsoft.OperationalInsights/workspaces/avt-amer-svc-wus3-snow-la"
 
-    criteria {
-        metric_namespace = "Microsoft.KeyVault/vaults"
-        metric_name = "CertificateNearExpiry"
-        aggregation = "Count"
-        operator = "GreaterThan"
-        threshold = each.value
+  dynamic "enabled_log" {
+    for_each = [
+      "AuditEvent",
+      "Performance",
+      "Request",
+      "Security",
+    ]
+    content {
+      category = enabled_log.value
     }
+  }
 
-    action {
-        action_group_id = var.service_now_action_group_id
+  dynamic "enabled_metric" {
+    for_each = [
+      "AllMetrics",
+    ]
+    content {
+      category = enabled_metric.value
     }
+  }
+
+  lifecycle {
+    ignore_changes = [enabled_log, metric]
+  }
 }

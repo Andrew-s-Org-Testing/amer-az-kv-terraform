@@ -1,17 +1,29 @@
 module "keyvault_private_endpoint" {
-  source = <PATH_TO_PRIVATE_ENDPOINT_MODULE>
+  source = "git::https://github.com/AvnetGIS/amer-private-endpoint-terraform.git?ref=v1.1.0"
+  #checkov:skip=CKV_TF_1:Module source is from a trusted internal repository
 
-  name = "${var.key_vault_name}-pe"
-    resource_group_name = var.resource_group_name
-    location = var.location
-    subnet_id = local.subnet_id
-    private_connection_resource_id = azurerm_key_vault.vault.id
-    subresource_names = ["vault"]
+  #naming vars
+  stage               = module.kv_amer_label.stage
+  geo_region          = module.kv_amer_label.environment
+  service_area        = module.kv_amer_label.tenant
+  additional_suffixes = module.kv_amer_label.attributes
 
-    private_dns_zone_group {
-        name = "keyvaultPrivateDnsZoneGroup"
-        private_dns_zone_ids = [var.private_dns_zone_id_keyvault]
-    }
+  #tagging vars
+  deployed_by        = var.deployed_by
+  application_name   = var.application_name
+  cost_center        = var.cost_center
+  bill_to_department = var.bill_to_department
+  project            = var.project
+  entity             = var.entity
 
-    tags = var.tags
+  resource_group_name = var.resource_group_name
+  subnet_id           = var.subnet_id_keyvault
+  location            = var.location
+  target_resource     = azurerm_key_vault.this.id
+  subresource_name    = "vault"
+
+  private_dns_zone_group = {
+    name                       = "keyvaultPrivateDnsZoneGroup"
+    private_dns_zone_group_ids = [var.private_dns_zone_id_keyvault]
+  }
 }

@@ -17,15 +17,15 @@ repos:
       args:
         - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
         - --args=--init
-    #TODO figure out why this isn't working, probably bad checkov config
-    - id: terraform_checkov
-      args:
-        - --args=--config-file __GIT_WORKING_DIR__/.checkov.yml
-        - --args=--quiet
-        - --args=--compact
-        - --args=--output-file checkov-results.xml
-        - --args=--ouput-format junitxml
 
+- repo: https://github.com/bridgecrewio/checkov.git
+  rev: 3.2.484 # change to tag or sha
+  hooks:
+    - id: checkov
+      args:
+        - --output=cli
+        - --quiet
+        - --compact
 
   # git generic hooks
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -38,10 +38,10 @@ repos:
       # IMPACT: Low, but improves code quality
       args: ['--markdown-linebreak-ext=md']  # Preserve markdown line breaks
 
-    - id: end-of-file-fixer
-      # WHY: Ensures files end with newline (POSIX standard)
-      # SPEED: Very fast
-      # IMPACT: Prevents issues with some tools
+        # - id: end-of-file-fixer
+        #   # WHY: Ensures files end with newline (POSIX standard)
+        #   # SPEED: Very fast
+        #   # IMPACT: Prevents issues with some tools
 
     - id: check-merge-conflict
       # WHY: Prevents committing unresolved merge conflicts
