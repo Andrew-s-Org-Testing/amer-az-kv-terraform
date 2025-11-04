@@ -1,0 +1,143 @@
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_variables_json:
+        description: 'Variables from Service Now in JSON String Format'
+        required: true
+        type: string
+      terraform_variables_file_name:
+        description: 'Name for the JSON File of Expected Terraform Variables'
+        required: false
+        default: 'tfvars.json'
+      service_now_ticket_id:
+        description: 'Service Now Ticket ID'
+        required: true
+        type: string
+      subscription_id:
+        description: 'Target Desired Subscription to Deploy to from Service Now'
+        required: true
+        type: string
+
+jobs:
+  upload_required_tf_vars_artifact:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v3
+
+        - name: Upload Local tfvars Artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: required-tfvars
+            path: ./${{ inputs.terraform_variables_file_name }}
+
+  service_now_validation:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
+    name: 'Validate Service Now Input and Environment'
+    needs: upload_required_tf_vars_artifact
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_validation.yaml@v1.1.0
+    secrets:
+      REUSABLE_WORKFLOW_PAT: ${{ secrets.REUSABLE_WORKFLOW_PAT }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }} #`pragma: allowlist secret`
+    with:
+        service_now_ticket_id: ${{ inputs.service_now_ticket_id }}
+        workflow_variables_json: ${{ inputs.workflow_variables_json }}
+        terraform_variables_file_name: ${{ inputs.terraform_variables_file_name }}
+        working_directory: "."
+        subscription_id: ${{ inputs.subscription_id }}
+        repository_owner: ${{ vars.repository_owner }}
+
+  upload_tf_vars_artifact:
+    needs: service_now_validation
+    if: needs.service_now_validation.outputs.is_valid == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create New tfvars File from Input
+        run: |
+          echo '${{ inputs.workflow_variables_json }}' | jq >> snow.tfvars.json
+      - name: Upload tfvars Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfvars
+          path: ./snow.tfvars.json
+
+  plan:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
+    needs:
+      - upload_tf_vars_artifact
+      - service_now_validation
+    name: 'Terraform Plan'
+    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_plan.yaml@1.2.0
+    secrets: #`pragma: allowlist secret`
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} #`pragma: allowlist secret`
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} #`pragma: allowlist secret`
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }} #`pragma: allowlist secret`
+      AZ_RESOURCE_GROUP_NAME: ${{ secrets.AZ_RESOURCE_GROUP_NAME }} #`pragma: allowlist secret`
+      AZ_STATE_STORE: ${{ secrets.AZ_STATE_STORE }} #`pragma: allowlist secret`
+      AZ_STATE_CONTAINER: ${{ secrets.AZ_STATE_CONTAINER }} #`pragma: allowlist secret`
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    with:
+      terraform_version: "1.12"
+      working_directory: "."
+      environment: ${{ needs.service_now_validation.outputs.matched_environment }}
+      tf_vars_artifact: tfvars
+      tf_vars_filename: snow.tfvars.json
+      tf_statefile_name: ${{ inputs.service_now_ticket_id }}.tfstate
+
+  apply:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
+    needs:
+      - plan
+      - service_now_validation
+    name: 'Terraform Apply'
+    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_apply.yaml@1.2.0
+    secrets: #`pragma: allowlist secret`
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} #`pragma: allowlist secret`
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} #`pragma: allowlist secret`
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }} #`pragma: allowlist secret`
+      AZ_RESOURCE_GROUP_NAME: ${{ secrets.AZ_RESOURCE_GROUP_NAME }} #`pragma: allowlist secret`
+      AZ_STATE_STORE: ${{ secrets.AZ_STATE_STORE }} #`pragma: allowlist secret`
+      AZ_STATE_CONTAINER: ${{ secrets.AZ_STATE_CONTAINER }} #`pragma: allowlist secret`
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    with:
+      terraform_version: "1.12"
+      working_directory: "."
+      environment: ${{ needs.service_now_validation.outputs.matched_environment }}
+      tf_vars_artifact: tfvars
+      tf_vars_filename: snow.tfvars.json
+      tf_statefile_name: ${{ inputs.service_now_ticket_id }}.tfstate
+
+
+  service_now_complete:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template' && success()
+    needs:
+      - service_now_validation
+    name: 'Report Validation Success to Service Now'
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_callback.yaml@v.1.1.0
+    with:
+      event: complete
+      notes: 'Terraform automation has finished the resource deployment successfully'
+      service_now_ticket_id: ${{ inputs.service_now_ticket_id }}
+    secrets:
+      SERVICE_NOW_USERNAME: ${{ secrets.SERVICE_NOW_USERNAME }}
+      SERVICE_NOW_PASSWORD: ${{ secrets.SERVICE_NOW_PASSWORD }}
+
+  service_now_failure:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template' && failure()
+    needs:
+      - service_now_validation
+    name: 'Report Validation Success to Service Now'
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_callback.yaml@v1.1.0
+    with:
+      event: complete
+      notes: 'An unknown failure has occured. Please contact ${{ vars.repository_owner }}'
+      service_now_ticket_id: ${{ inputs.service_now_ticket_id }}
+    secrets:
+      SERVICE_NOW_USERNAME: ${{ secrets.SERVICE_NOW_USERNAME }}
+      SERVICE_NOW_PASSWORD: ${{ secrets.SERVICE_NOW_PASSWORD }}
