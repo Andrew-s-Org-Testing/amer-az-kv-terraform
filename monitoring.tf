@@ -1,8 +1,8 @@
-module "azure_monitoring_setup" {
-  source = "git::https://github.com/AvnetGIS/amer-az-alerts-terraform?ref=v1.0.0"
-  #checkov:skip=CKV_TF_1:Module source is from a trusted internal repository
-  target_resource_id = azurerm_key_vault.this.id
-}
+#module "azure_monitoring_setup" {
+#  source = "git::https://github.com/AvnetGIS/amer-az-alerts-terraform?ref=v1.1.1"
+#  #checkov:skip=CKV_TF_1:Module source is from a trusted internal repository
+#  target_resource_id = azurerm_key_vault.this.id
+#}
 
 resource "azurerm_monitor_diagnostic_setting" "vault" {
   name                       = "${module.kv_amer_label.id}-diagnostics"
