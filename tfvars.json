@@ -1,5 +1,4 @@
 {
-  "private_dns_zone_id_keyvault": "",
   "subnet_id_keyvault": "",
   "allowed_ip_addressess_keyvault": [],
   "allowed_subnet_ids_keyvault": [],

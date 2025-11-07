@@ -24,6 +24,6 @@ module "keyvault_private_endpoint" {
 
   private_dns_zone_group = {
     name                       = "keyvaultPrivateDnsZoneGroup"
-    private_dns_zone_group_ids = [var.private_dns_zone_id_keyvault]
+    private_dns_zone_group_ids = ["/subscriptions/4506920e-7581-4f01-a3c3-202caa8c5dd7/resourceGroups/avt-prd-wus2-vnet-rg-014/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"]
   }
 }

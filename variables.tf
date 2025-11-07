@@ -1,10 +1,5 @@
 # PE Variables
 
-variable "private_dns_zone_id_keyvault" {
-  description = "The Azure ARM ID of the private DNS zone for the Key Vault"
-  type        = string
-}
-
 variable "subnet_id_keyvault" {
   description = "The Azure ARM ID of the subnet or vnet to deploy the Key Vault private endpoint into"
   type        = string
