@@ -32,4 +32,3 @@ jobs:
       tf_statefile_name: tests.tfstate
       test_level: unit
       environment: npr
-
