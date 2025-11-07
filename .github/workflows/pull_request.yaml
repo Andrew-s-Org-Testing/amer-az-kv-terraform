@@ -20,6 +20,7 @@ jobs:
       AZ_RESOURCE_GROUP_NAME: ${{ secrets.AZ_RESOURCE_GROUP_NAME }} #`pragma: allowlist secret`
       AZ_STATE_STORE: ${{ secrets.AZ_STATE_STORE }} #`pragma: allowlist secret`
       AZ_STATE_CONTAINER: ${{ secrets.AZ_STATE_CONTAINER }} #`pragma: allowlist secret`
+      AVNET_GIS_GHE_APP_KEY: ${{ secrets.AVNET_GIS_GHE_APP_KEY }} #`pragma: allowlist secret`
       INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }} #`pragma: allowlist secret`
     permissions:
       contents: read
