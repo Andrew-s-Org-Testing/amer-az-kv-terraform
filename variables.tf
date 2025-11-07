@@ -196,3 +196,4 @@ variable "deployed_by" {
   description = "The individual or team deploying the Key Vault"
   type        = string
 }
+
