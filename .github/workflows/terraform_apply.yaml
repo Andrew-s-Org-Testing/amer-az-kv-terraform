@@ -20,6 +20,7 @@ on:
 
 jobs:
   upload_required_tf_vars_artifact:
+      if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
       runs-on: ubuntu-latest
       steps:
         - name: Checkout
@@ -35,10 +36,10 @@ jobs:
     if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
     name: 'Validate Service Now Input and Environment'
     needs: upload_required_tf_vars_artifact
-    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_validation.yaml@v1.1.0
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_validation.yaml@main
     secrets:
       REUSABLE_WORKFLOW_PAT: ${{ secrets.REUSABLE_WORKFLOW_PAT }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }} #`pragma: allowlist secret`
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
     with:
         service_now_ticket_id: ${{ inputs.service_now_ticket_id }}
         workflow_variables_json: ${{ inputs.workflow_variables_json }}
@@ -49,7 +50,7 @@ jobs:
 
   upload_tf_vars_artifact:
     needs: service_now_validation
-    if: needs.service_now_validation.outputs.is_valid == 'true'
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template' && needs.service_now_validation.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Create New tfvars File from Input
@@ -67,7 +68,7 @@ jobs:
       - upload_tf_vars_artifact
       - service_now_validation
     name: 'Terraform Plan'
-    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_plan.yaml@1.2.0
+    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_plan.yaml@v1.2.0
     secrets: #`pragma: allowlist secret`
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} #`pragma: allowlist secret`
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} #`pragma: allowlist secret`
@@ -93,7 +94,7 @@ jobs:
       - plan
       - service_now_validation
     name: 'Terraform Apply'
-    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_apply.yaml@1.2.0
+    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_apply.yaml@v1.2.0
     secrets: #`pragma: allowlist secret`
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} #`pragma: allowlist secret`
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} #`pragma: allowlist secret`
@@ -119,7 +120,7 @@ jobs:
     needs:
       - service_now_validation
     name: 'Report Validation Success to Service Now'
-    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_callback.yaml@v.1.1.0
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_callback.yaml@main
     with:
       event: complete
       notes: 'Terraform automation has finished the resource deployment successfully'
@@ -133,7 +134,7 @@ jobs:
     needs:
       - service_now_validation
     name: 'Report Validation Success to Service Now'
-    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_callback.yaml@v1.1.0
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_callback.yaml@main
     with:
       event: complete
       notes: 'An unknown failure has occured. Please contact ${{ vars.repository_owner }}'
