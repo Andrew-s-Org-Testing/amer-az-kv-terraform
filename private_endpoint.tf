@@ -1,5 +1,5 @@
 module "keyvault_private_endpoint" {
-  source = "git::https://github.com/AvnetGIS/amer-private-endpoint-terraform.git?ref=v1.1.0"
+  source = "git::https://github.com/Andrew-s-Org-Testing/amer-private-endpoint-terraform.git?ref=v1.1.0"
   #checkov:skip=CKV_TF_1:Module source is from a trusted internal repository
 
   #naming vars
