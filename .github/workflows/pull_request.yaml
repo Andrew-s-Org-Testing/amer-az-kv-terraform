@@ -1,0 +1,34 @@
+on:
+  pull_request:
+    paths-ignore:
+      - '.github/**'
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+
+jobs:
+  test:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
+    name: 'Terraform Test'
+    uses: Andrew-s-Org-Testing/terraform-actions-template-test/.github/workflows/terraform_test.yaml@asutliff/add-remote-repo-checkout
+    secrets: #`pragma: allowlist secret`
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} #`pragma: allowlist secret`
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} #`pragma: allowlist secret`
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }} #`pragma: allowlist secret`
+      AZ_RESOURCE_GROUP_NAME: ${{ secrets.AZ_RESOURCE_GROUP_NAME }} #`pragma: allowlist secret`
+      AZ_STATE_STORE: ${{ secrets.AZ_STATE_STORE }} #`pragma: allowlist secret`
+      AZ_STATE_CONTAINER: ${{ secrets.AZ_STATE_CONTAINER }} #`pragma: allowlist secret`
+      AVNETGIS_TF_GHE_APP_KEY: ${{ secrets.AVNETGIS_TF_GHE_APP_KEY }} #`pragma: allowlist secret`
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }} #`pragma: allowlist secret`
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    with:
+      terraform_version: "1.12"
+      working_directory: "."
+      tf_statefile_name: tests.tfstate
+      test_level: unit
+      environment: npr

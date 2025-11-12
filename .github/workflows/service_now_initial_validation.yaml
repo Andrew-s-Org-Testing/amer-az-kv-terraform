@@ -1,0 +1,63 @@
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_variables_json:
+        description: 'Variables from Service Now in JSON String Format'
+        required: true
+        type: string
+      terraform_variables_file_name:
+        description: 'Name for the JSON File of Expected Terraform Variables'
+        required: false
+        default: 'tfvars.json'
+        type: string
+      service_now_ticket_id:
+        description: 'Service Now Ticket ID'
+        required: true
+        type: string
+      subscription_id:
+        description: 'Target Desired Subscription to Deploy to from Service Now'
+        required: true
+        type: string
+
+jobs:
+  upload_required_tf_vars_artifact:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Upload Local tfvars Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: required-tfvars
+          path: ./${{ inputs.terraform_variables_file_name }}
+
+  service_now_initial_variables_validation:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
+    name: 'Validate Service Now Input and Environment'
+    needs: upload_required_tf_vars_artifact
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_validation.yaml@main
+    secrets:
+      REUSABLE_WORKFLOW_PAT: ${{ secrets.REUSABLE_WORKFLOW_PAT }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+    with:
+        service_now_ticket_id: ${{ inputs.service_now_ticket_id }}
+        workflow_variables_json: ${{ inputs.workflow_variables_json }}
+        terraform_variables_file_name: ${{ inputs.terraform_variables_file_name }}
+        working_directory: "."
+        subscription_id: ${{ inputs.subscription_id }}
+        repository_owner: ${{ vars.repository_owner }}
+
+  service_now_validate_success:
+    if: github.repository != 'AvnetGIS/terraform-no-code-module-template' && success()
+    needs: service_now_initial_variables_validation
+    name: 'Report Validation Success to Service Now'
+    uses: AvnetGIS/workflow-templates-service-now/.github/workflows/service_now_callback.yaml@main
+    with:
+      event: success
+      notes: 'GitHub automation variables valid, please wait for manual approval for the Service Now task to proceed'
+      service_now_ticket_id: ${{ inputs.service_now_ticket_id }}
+    secrets:
+      SERVICE_NOW_USERNAME: ${{ secrets.SERVICE_NOW_USERNAME }}
+      SERVICE_NOW_PASSWORD: ${{ secrets.SERVICE_NOW_PASSWORD }}

@@ -1,0 +1,29 @@
+on:
+  workflow_dispatch:
+    inputs:
+      service_now_ticket_id:
+        description: 'Service Now Ticket ID'
+        required: true
+        type: string
+
+
+jobs:
+  destroy:
+    if: github.repository != 'Tanchwa/infrastructure-deployment-template'
+    name: 'Terraform Destroy'
+    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_destroy.yaml@v1.2.0
+    secrets: #`pragma: allowlist secret`
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} #`pragma: allowlist secret`
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} #`pragma: allowlist secret`
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }} #`pragma: allowlist secret`
+      AZ_RESOURCE_GROUP_NAME: ${{ secrets.AZ_RESOURCE_GROUP_NAME }} #`pragma: allowlist secret`
+      AZ_STATE_STORE: ${{ secrets.AZ_STATE_STORE }} #`pragma: allowlist secret`
+      AZ_STATE_CONTAINER: ${{ secrets.AZ_STATE_CONTAINER }} #`pragma: allowlist secret`
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    with:
+      terraform_version: "1.12"
+      working_directory: "."
+      with: ${{ inputs.service_now_ticket_id }}

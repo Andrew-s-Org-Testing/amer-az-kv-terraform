@@ -1,0 +1,112 @@
+repos:
+  # config specific to terraform
+- repo: https://github.com/antonbabenko/pre-commit-terraform
+  rev: v1.100.0
+  hooks:
+    - id: terraform_fmt
+      args:
+        - --args=-recursive
+    - id: terraform_validate
+      args:
+        - --args=-json
+        - --hook-config=--retry-once-with-cleanup=true
+    - id: terraform_docs
+      args:
+        - --args=--config=.terraform-docs.yaml
+    - id: terraform_tflint
+      args:
+        - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+        - --args=--init
+
+- repo: https://github.com/bridgecrewio/checkov.git
+  rev: 3.2.484 # change to tag or sha
+  hooks:
+    - id: checkov
+      args:
+        - --output=cli
+        - --quiet
+        - --compact
+
+  # git generic hooks
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0  # Use the ref you want to point at
+  hooks:
+    # File content checks
+    - id: trailing-whitespace
+      # WHY: Trailing whitespace can cause diff noise and formatting issues
+      # SPEED: Very fast
+      # IMPACT: Low, but improves code quality
+      args: ['--markdown-linebreak-ext=md']  # Preserve markdown line breaks
+
+        # - id: end-of-file-fixer
+        #   # WHY: Ensures files end with newline (POSIX standard)
+        #   # SPEED: Very fast
+        #   # IMPACT: Prevents issues with some tools
+
+    - id: check-merge-conflict
+      # WHY: Prevents committing unresolved merge conflicts
+      # SPEED: Very fast
+      # IMPACT: Critical - prevents broken commits
+
+    - id: check-case-conflict
+      # WHY: Prevents issues on case-insensitive filesystems (Windows/macOS)
+      # SPEED: Very fast
+      # IMPACT: Prevents cross-platform issues
+
+    # File format validation
+    - id: check-yaml
+      # WHY: Validates YAML syntax before commit
+      # SPEED: Fast
+      # IMPACT: Prevents invalid YAML files
+      # APPLIES TO: .github/workflows/*.yml, .pre-commit-config.yaml, etc.
+      args: ['--allow-multiple-documents']
+
+    - id: check-json
+      # WHY: Validates JSON syntax
+      # SPEED: Fast
+      # IMPACT: Prevents invalid JSON files
+      # APPLIES TO: *.json files in module
+
+    - id: check-toml
+      # WHY: Validates TOML files if used
+      # SPEED: Fast
+      # NOTE: May not be needed if you don't use TOML
+
+    # Security checks
+    - id: detect-private-key
+      # WHY: Prevents accidentally committing private keys
+      # SPEED: Fast
+      # IMPACT: Critical security protection
+      # NOTE: May have false positives with test keys
+
+    - id: check-added-large-files
+      # WHY: Prevents committing large files that should be in Git LFS
+      # SPEED: Fast
+      # IMPACT: Keeps repository size manageable
+      args: ['--maxkb=1000']  # Adjust size limit as needed
+
+    # TODO: Add these if relevant to your workflow
+    # - id: check-executables-have-shebangs
+    # - id: check-shebang-scripts-are-executable
+    # - id: detect-aws-credentials  # Enable if you use AWS
+
+
+# SECRET DETECTION
+# Advanced secret detection beyond basic private key check
+#
+- repo: https://github.com/Yelp/detect-secrets
+  rev: v1.5.0
+  hooks:
+    - id: detect-secrets
+      # WHY: Comprehensive secret detection (API keys, passwords, tokens)
+      # SPEED: Medium
+      # IMPACT: Critical security protection
+      args:
+        - '--baseline'
+        - '.secrets.baseline'
+        - '--exclude-files'
+        - '.*\.terraform\.lock\.hcl'  # Exclude lock files
+        - '--exclude-files'
+        - '.*test.*\.go'              # May exclude test files if they contain test secrets
+      # TODO: Create initial baseline with: detect-secrets scan --baseline .secrets.baseline
+      # TODO: Review and update baseline regularly
