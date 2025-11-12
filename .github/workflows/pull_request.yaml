@@ -12,7 +12,7 @@ jobs:
   test:
     if: github.repository != 'AvnetGIS/terraform-no-code-module-template'
     name: 'Terraform Test'
-    uses: AvnetGIS/workflow-templates-terraform/.github/workflows/terraform_test.yaml@asutliff/add-remote-repo-checkout
+    uses: Andrew-s-Org-Testing/terraform-actions-template-test/.github/workflows/terraform_test.yaml@asutliff/add-remote-repo-checkout
     secrets: #`pragma: allowlist secret`
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} #`pragma: allowlist secret`
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} #`pragma: allowlist secret`
